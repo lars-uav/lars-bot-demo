@@ -125,4 +125,5 @@ void loop() {
                         break;
                 }
         }
+	Serial.flush();
 }
