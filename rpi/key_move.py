@@ -59,7 +59,7 @@ def back_grid():
 
 def right_grid():
   arduino.write(b'R')
-  time.sleep(1.82)
+  time.sleep(1.72)
   arduino.write(b'S')
 
 try:
