@@ -24,7 +24,7 @@ Note:
 import serial
 import curses
 import time
-from automation2 import automate_inputs
+from automation_optimised import automate_inputs
 from constants import *
 
 arduino = serial.Serial('/dev/ttyACM0', 9600)  # Port and baudrate
