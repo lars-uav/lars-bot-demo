@@ -1,5 +1,7 @@
 import numpy as np
 
+# a change
+
 def cartesian_to_matrix_index(coord, grid_dim):
     """
     Function to convert Cartesian coordinates to matrix indexes.
