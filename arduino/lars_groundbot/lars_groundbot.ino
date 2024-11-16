@@ -109,16 +109,16 @@ void loop() {
                 char c = Serial.read();
                         switch(c){
                         case 'F':
-                        forward(120);
+                        forward(250);
                         break;
                         case 'B':
-                        backward(120);
+                        backward(250);
                         break;
                         case 'L':
-                        left(120);
+                        left(250);
                         break;
                         case 'R':
-                        right(120);
+                        right(250);
                         break;
                         case 'S':
                         stop();
