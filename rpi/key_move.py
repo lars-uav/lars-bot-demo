@@ -49,17 +49,17 @@ def bytes_pose_to_tuple(b: bytes):
 
 def front_grid():
   arduino.write(b'F')
-  time.sleep(1.92)
+  time.sleep(3.38)
   arduino.write(b'S')
 
 def back_grid():
   arduino.write(b'B')
-  time.sleep(1.89)
+  time.sleep(3.36)
   arduino.write(b'S')
 
 def right_grid():
   arduino.write(b'R')
-  time.sleep(1.72)
+  time.sleep(2.185)
   arduino.write(b'S')
 
 try:
