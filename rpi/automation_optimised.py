@@ -34,96 +34,97 @@ def automate_inputs(pose: tuple[tuple[int,int],str],measurement_position: tuple[
 
     current_theta = theta
 
-    if theta == 'L':
+    if theta == 'l':
         if x_disp > 0:
-            movements.append('B'*x_disp)
+            movements.append('b'*x_disp)
         elif x_disp < 0:
-            movements.append('F'*abs(x_disp))
+            for _ in range(abs(x_disp)):
+                movements.append('f')
 
         if y_disp != 0:
-            movements.append('R')
-            current_theta = 'U'
+            movements.append('r')
+            current_theta = 'u'
             if y_disp > 0:
-                movements.append('F'*y_disp)
+                movements.append('f'*y_disp)
             elif y_disp < 0:
-                movements.append('B'*abs(y_disp))
+                movements.append('b'*abs(y_disp))
 
-    elif theta == 'R':
+    elif theta == 'r':
         if x_disp > 0:
-            movements.append('F'*x_disp)
+            movements.append('f'*x_disp)
         elif x_disp < 0:
-            movements.append('B'*abs(x_disp))
+            movements.append('b'*abs(x_disp))
 
         if y_disp != 0:
-            movements.append('R')
-            current_theta = 'D'
+            movements.append('r')
+            current_theta = 'd'
             if y_disp > 0:
-                movements.append('B'*y_disp)
+                movements.append('b'*y_disp)
             elif y_disp < 0:
-                movements.append('F'*abs(y_disp))
+                movements.append('f'*abs(y_disp))
 
-    elif theta == 'U':
+    elif theta == 'u':
         if y_disp > 0:
-            movements.append('F'*x_disp)
+            movements.append('f'*x_disp)
         elif y_disp < 0:
-            movements.append('B'*abs(x_disp))
+            movements.append('b'*abs(x_disp))
 
         if x_disp != 0:
-            movements.append('R')
-            current_theta = 'R'
+            movements.append('r')
+            current_theta = 'r'
             if x_disp > 0:
-                movements.append('F'*y_disp)
+                movements.append('f'*y_disp)
             elif x_disp < 0:
-                movements.append('B'*abs(y_disp))
+                movements.append('b'*abs(y_disp))
 
-    elif theta == 'D':
+    elif theta == 'd':
         if y_disp > 0:
-            movements.append('B'*x_disp)
+            movements.append('b'*x_disp)
         elif y_disp < 0:
-            movements.append('F'*abs(x_disp))
+            movements.append('f'*abs(x_disp))
 
         if x_disp != 0:
-            movements.append('R')
-            current_theta = 'L'
+            movements.append('r')
+            current_theta = 'l'
             if x_disp > 0:
-                movements.append('B'*y_disp)
+                movements.append('b'*y_disp)
             elif x_disp < 0:
-                movements.append('F'*abs(y_disp))
+                movements.append('f'*abs(y_disp))
 
     if final_theta != None:
         if final_theta == curr_theta:
             pass
-        elif final_theta == 'L':
-            if theta == 'U':
-                movements.append('R')
-            elif theta == 'R':
-                movements.append('R'*2)
-            elif theta == 'D':
-                movements.append('R'*3)
+        elif final_theta == 'l':
+            if theta == 'u':
+                movements.append('r')
+            elif theta == 'r':
+                movements.append('r'*2)
+            elif theta == 'd':
+                movements.append('r'*3)
 
-        elif final_theta == 'R':
-            if theta == 'D':
-                movements.append('R')
-            elif theta == 'L':
-                movements.append('R'*2)
-            elif theta == 'U':
-                movements.append('R'*3)
+        elif final_theta == 'r':
+            if theta == 'r':
+                movements.append('r')
+            elif theta == 'l':
+                movements.append('r'*2)
+            elif theta == 'u':
+                movements.append('r'*3)
 
-        elif final_theta == 'U':
-            if theta == 'R':
-                movements.append('R')
-            elif theta == 'D':
-                movements.append('R'*2)
-            elif theta == 'L':
-                movements.append('R'*3)
+        elif final_theta == 'u':
+            if theta == 'r':
+                movements.append('r')
+            elif theta == 'd':
+                movements.append('r'*2)
+            elif theta == 'l':
+                movements.append('r'*3)
 
-        elif final_theta == 'D':
-            if theta == 'L':
-                movements.append('R')
-            elif theta == 'U':
-                movements.append('R'*2)
-            elif theta == 'R':
-                movements.append('R'*3)
+        elif final_theta == 'd':
+            if theta == 'l':
+                movements.append('r')
+            elif theta == 'u':
+                movements.append('r'*2)
+            elif theta == 'r':
+                movements.append('r'*3)
         
     return movements,current_theta
 
