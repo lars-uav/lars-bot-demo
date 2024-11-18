@@ -36,94 +36,118 @@ def automate_inputs(pose: tuple[tuple[int,int],str],measurement_position: tuple[
 
     if theta == 'L':
         if x_disp > 0:
-            movements.append('B'*x_disp)
+            for _ in range(x_disp):
+                movements.append('B')
         elif x_disp < 0:
-            movements.append('F'*abs(x_disp))
+            for _ in range(abs(x_disp)):
+                movements.append('F')
 
         if y_disp != 0:
             movements.append('R')
             current_theta = 'U'
             if y_disp > 0:
-                movements.append('F'*y_disp)
+                for _ in range(y_disp):
+                    movements.append('F')
             elif y_disp < 0:
-                movements.append('B'*abs(y_disp))
+                for _ in range(abs(y_disp)):
+                    movements.append('B')
 
     elif theta == 'R':
         if x_disp > 0:
-            movements.append('F'*x_disp)
+            for _ in range(x_disp):
+                movements.append('F')
         elif x_disp < 0:
-            movements.append('B'*abs(x_disp))
+            for _ in range(abs(x_disp)):
+                movements.append('B')
 
         if y_disp != 0:
             movements.append('R')
             current_theta = 'D'
             if y_disp > 0:
-                movements.append('B'*y_disp)
+                for _ in range(y_disp):
+                    movements.append('B')
             elif y_disp < 0:
-                movements.append('F'*abs(y_disp))
+                for _ in range(abs(y_disp)):
+                    movements.append('F')
 
     elif theta == 'U':
         if y_disp > 0:
-            movements.append('F'*x_disp)
+            for _ in range(y_disp):
+                movements.append('F')
         elif y_disp < 0:
-            movements.append('B'*abs(x_disp))
+            for _ in range(abs(y_disp)):
+                movements.append('B')
 
         if x_disp != 0:
             movements.append('R')
             current_theta = 'R'
             if x_disp > 0:
-                movements.append('F'*y_disp)
+                for _ in range(x_disp):
+                    movements.append('F')
             elif x_disp < 0:
-                movements.append('B'*abs(y_disp))
+                for _ in range(abs(x_disp)):
+                    movements.append('B')
 
     elif theta == 'D':
         if y_disp > 0:
-            movements.append('B'*x_disp)
+            for _ in range(y_disp):
+                movements.append('B')
         elif y_disp < 0:
-            movements.append('F'*abs(x_disp))
+            for _ in range(abs(y_disp)):
+                movements.append('F')
 
         if x_disp != 0:
             movements.append('R')
             current_theta = 'L'
             if x_disp > 0:
-                movements.append('B'*y_disp)
+                for _ in range(x_disp):
+                    movements.append('B')
             elif x_disp < 0:
-                movements.append('F'*abs(y_disp))
+                for _ in range(abs(x_disp)):
+                    movements.append('F')
 
     if final_theta != None:
-        if final_theta == curr_theta:
+        if final_theta == current_theta:
             pass
         elif final_theta == 'L':
-            if theta == 'U':
+            if current_theta == 'U':
                 movements.append('R')
-            elif theta == 'R':
-                movements.append('R'*2)
-            elif theta == 'D':
-                movements.append('R'*3)
+            elif current_theta == 'R':
+                for _ in range(2):
+                    movements.append('R')
+            elif current_theta == 'D':
+                for _ in range(3):
+                    movements.append('R')
 
         elif final_theta == 'R':
-            if theta == 'D':
+            if current_theta == 'D':
                 movements.append('R')
-            elif theta == 'L':
-                movements.append('R'*2)
-            elif theta == 'U':
-                movements.append('R'*3)
+            elif current_theta == 'L':
+                for _ in range(2):
+                    movements.append('R')
+            elif current_theta == 'U':
+                for _ in range(3):
+                    movements.append('R')
 
         elif final_theta == 'U':
-            if theta == 'R':
+            if current_theta == 'R':
                 movements.append('R')
-            elif theta == 'D':
-                movements.append('R'*2)
-            elif theta == 'L':
-                movements.append('R'*3)
+            elif current_theta == 'D':
+                for _ in range(2):
+                    movements.append('R')
+            elif current_theta == 'L':
+                for _ in range(3):
+                    movements.append('R')
 
         elif final_theta == 'D':
-            if theta == 'L':
+            if current_theta == 'L':
                 movements.append('R')
-            elif theta == 'U':
-                movements.append('R'*2)
-            elif theta == 'R':
-                movements.append('R'*3)
+            elif current_theta == 'U':
+                for _ in range(2):
+                    movements.append('R')
+            elif current_theta == 'R':
+                for _ in range(3):
+                    movements.append('R')
         
     return movements,current_theta
 
@@ -139,83 +163,74 @@ def test_automation():
     pose = ((3, 4), "l")
     measurement_position = (1, 1)
     grid_dim = (5, 5)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
     print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     # Test 3
     pose = ((2, 2), "r")
     measurement_position = (0, 0)
     grid_dim = (5, 5)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
     print(f"Test 3:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     # Test Amog
     pose = ((0, 0), "u")
     measurement_position = (3, 3)
     grid_dim = (4, 4)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Test Amog:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Test Amog:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     # Test Simulation #
     pose = ((0, 0), "u")
     measurement_position = (2, 0)
     grid_dim = (3, 3)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 1:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 1:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((2, 0), "u")
     measurement_position = (1, 0)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((1, 0), "u")
     measurement_position = (0, 0)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 3:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 3:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((0, 0), "r")
     measurement_position = (0, 1)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 4:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 4:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((0, 1), "d")
     measurement_position = (1, 1)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 5:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 5:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((1, 1), "d")
     measurement_position = (1, 1)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 6:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 6:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((1, 1), "r")
     measurement_position = (1, 2)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 7:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 7:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((1, 2), "d")
     measurement_position = (1, 2)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 8:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 8:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((1, 2), "u")
     measurement_position = (1, 2)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 9:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 9:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
     pose = ((1, 2), "l")
     measurement_position = (1, 1)
-    movements = automate_inputs(pose, measurement_position, grid_dim)
-    print(f"Movement 10:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
-    print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
+    movements,curr_theta = automate_inputs(pose, measurement_position, grid_dim)
+    print(f"Movement 10:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n{curr_theta=}\n\n")
 
 if __name__ == "__main__":
     test_automation()
