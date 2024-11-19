@@ -478,7 +478,7 @@ def main():
                         status_container.empty()
                     
                     pil_image = Image.fromarray(frame_rgb)
-                    video_container.image(pil_image, channels="RGB", use_column_width=True)
+                    video_container.image(pil_image, channels="RGB", use_container_width=True)
             except queue.Empty:
                 continue
             except Exception as e:
