@@ -4,7 +4,7 @@ import time
 import json
 
 class RobotController:
-    def __init__(self, serial_port='/dev/ttyACM0', baud_rate=9600):
+    def __init__(self, serial_port='/dev/ttyUSB0', baud_rate=9600):
         self.arduino = serial.Serial(serial_port, baud_rate)
         time.sleep(2)  # Wait for Arduino connection to establish
         

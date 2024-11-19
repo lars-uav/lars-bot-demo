@@ -17,47 +17,134 @@ class RobotClient:
         self.port = port
         self.socket = None
         self.connected = False
+        self.last_error = None
+        self.connection_status = "Not connected"
         
     def connect(self):
         try:
+            st.info(f"Attempting to connect to robot at {self.host}:{self.port}...")
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(5)  # 5 second timeout for connection
+            
+            # Try to connect and print connection details
+            st.info("Creating socket connection...")
             self.socket.connect((self.host, self.port))
+            self.socket.settimeout(2)  # 2 second timeout for operations
+            
+            # Test connection with a simple command
+            st.info("Testing connection...")
+            test_data = json.dumps({'command': 'test'}).encode()
+            self.socket.send(test_data)
+            
+            # Wait for response
+            response = self.socket.recv(1024).decode()
+            st.info(f"Received response: {response}")
+            
             self.connected = True
+            self.connection_status = "Connected"
+            self.last_error = None
             return True
+            
+        except ConnectionRefusedError:
+            self.last_error = "Connection refused - Is the robot server running?"
+            self.connection_status = "Connection refused"
+            st.error(self.last_error)
+            
+        except socket.timeout:
+            self.last_error = "Connection timed out - Check if robot is reachable"
+            self.connection_status = "Timeout"
+            st.error(self.last_error)
+            
+        except json.JSONDecodeError:
+            self.last_error = "Invalid response from robot"
+            self.connection_status = "Protocol error"
+            st.error(self.last_error)
+            
         except Exception as e:
-            st.error(f"Failed to connect to robot: {str(e)}")
-            self.connected = False
-            return False
+            self.last_error = f"Connection error: {str(e)}"
+            self.connection_status = "Error"
+            st.error(self.last_error)
+            
+        self.connected = False
+        if self.socket:
+            self.socket.close()
+            self.socket = None
+        return False
             
     def disconnect(self):
         if self.socket:
+            try:
+                self.socket.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
             self.socket.close()
         self.connected = False
+        self.connection_status = "Disconnected"
+        self.socket = None
         
     def send_command(self, command):
         if not self.connected:
-            raise Exception("Not connected to robot")
+            st.error("Not connected to robot")
+            return False
             
         try:
             # Send command
             data = json.dumps({'command': command})
             self.socket.send(data.encode())
             
-            # Wait for response
+            # Wait for response with timeout
+            self.socket.settimeout(2)
             response = self.socket.recv(1024).decode()
             result = json.loads(response)
             
-            if result['status'] == 'success':
+            if result.get('status') == 'success':
                 return True
             else:
-                st.error(f"Command failed: {result['message']}")
+                st.error(f"Command failed: {result.get('message', 'Unknown error')}")
                 return False
                 
+        except socket.timeout:
+            st.error("Command timed out - no response from robot")
+            self.connected = False
+            return False
+            
         except Exception as e:
             st.error(f"Error sending command: {str(e)}")
             self.connected = False
             return False
 
+    def get_status(self):
+        """Get detailed connection status"""
+        return {
+            'connected': self.connected,
+            'status': self.connection_status,
+            'last_error': self.last_error,
+            'host': self.host,
+            'port': self.port
+        }
+
+def display_robot_status(robot_client):
+    """Display detailed robot connection status"""
+    status = robot_client.get_status()
+    
+    if status['connected']:
+        st.success(f"🤖 Connected to {status['host']}:{status['port']}")
+    else:
+        st.error("🔌 Robot Disconnected")
+        if status['last_error']:
+            st.error(f"Last Error: {status['last_error']}")
+        
+        # Connection troubleshooting tips
+        st.markdown("""
+        #### Troubleshooting Tips:
+        1. Check if the robot server is running
+        2. Verify the IP address and port
+        3. Check network connectivity
+        4. Check if any firewalls are blocking the connection
+        5. Try restarting the robot server
+        """)
+
+        
 def calculate_grid_position(grid_number):
     """Convert grid number (1-9) to x, y coordinates"""
     row = (grid_number - 1) // 3
