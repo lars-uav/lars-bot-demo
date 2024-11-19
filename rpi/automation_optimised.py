@@ -36,7 +36,8 @@ def automate_inputs(pose: tuple[tuple[int,int],str],measurement_position: tuple[
 
     if theta == 'l':
         if x_disp > 0:
-            movements.append('b'*x_disp)
+            for _ in range(x_disp):
+                movements.append('b'*x_disp)
         elif x_disp < 0:
             for _ in range(abs(x_disp)):
                 movements.append('f')
@@ -46,10 +47,10 @@ def automate_inputs(pose: tuple[tuple[int,int],str],measurement_position: tuple[
             current_theta = 'u'
             if y_disp > 0:
                 for _ in range(y_disp):
-                    movements.append('f')
+                    movements.append('b')
             elif y_disp < 0:
                 for _ in range(abs(y_disp)):
-                    movements.append('b')
+                    movements.append('f')
 
     elif theta == 'r':
         if x_disp > 0:
@@ -64,18 +65,18 @@ def automate_inputs(pose: tuple[tuple[int,int],str],measurement_position: tuple[
             current_theta = 'd'
             if y_disp > 0:
                 for _ in range(y_disp):
-                    movements.append('b')
+                    movements.append('f')
             elif y_disp < 0:
                 for _ in range(abs(y_disp)):
-                    movements.append('f')
+                    movements.append('b')
 
     elif theta == 'u':
         if y_disp > 0:
             for _ in range(y_disp):
-                movements.append('f')
+                movements.append('b')
         elif y_disp < 0:
             for _ in range(abs(y_disp)):
-                movements.append('b')
+                movements.append('f')
 
         if x_disp != 0:
             movements.append('r')
@@ -90,10 +91,10 @@ def automate_inputs(pose: tuple[tuple[int,int],str],measurement_position: tuple[
     elif theta == 'd':
         if y_disp > 0:
             for _ in range(y_disp):
-                movements.append('b')
+                movements.append('f')
         elif y_disp < 0:
             for _ in range(abs(y_disp)):
-                movements.append('f')
+                movements.append('b')
 
         if x_disp != 0:
             movements.append('r')
