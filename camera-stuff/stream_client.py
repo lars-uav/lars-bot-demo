@@ -1,16 +1,93 @@
 import streamlit as st
-import cv2
 import socket
-import pickle
-import struct
-import numpy as np
-import threading
-from PIL import Image
+import json
 import time
-import queue
 from enum import Enum
+import threading
+import queue
+import numpy as np
+import cv2
 import os
+import struct
+import pickle
+import PIL.Image as Image
+class RobotClient:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.socket = None
+        self.connected = False
+        
+    def connect(self):
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect((self.host, self.port))
+            self.connected = True
+            return True
+        except Exception as e:
+            st.error(f"Failed to connect to robot: {str(e)}")
+            self.connected = False
+            return False
+            
+    def disconnect(self):
+        if self.socket:
+            self.socket.close()
+        self.connected = False
+        
+    def send_command(self, command):
+        if not self.connected:
+            raise Exception("Not connected to robot")
+            
+        try:
+            # Send command
+            data = json.dumps({'command': command})
+            self.socket.send(data.encode())
+            
+            # Wait for response
+            response = self.socket.recv(1024).decode()
+            result = json.loads(response)
+            
+            if result['status'] == 'success':
+                return True
+            else:
+                st.error(f"Command failed: {result['message']}")
+                return False
+                
+        except Exception as e:
+            st.error(f"Error sending command: {str(e)}")
+            self.connected = False
+            return False
 
+def calculate_grid_position(grid_number):
+    """Convert grid number (1-9) to x, y coordinates"""
+    row = (grid_number - 1) // 3
+    col = (grid_number - 1) % 3
+    return row, col
+
+def get_movement_sequence(current_grid, target_grid):
+    """Calculate movement sequence to get from current to target grid"""
+    current_row, current_col = calculate_grid_position(current_grid)
+    target_row, target_col = calculate_grid_position(target_grid)
+    
+    moves = []
+    
+    # Calculate row and column differences
+    row_diff = target_row - current_row
+    col_diff = target_col - current_col
+    
+    # Add vertical movements
+    if row_diff > 0:
+        moves.extend(['front'] * row_diff)
+    elif row_diff < 0:
+        moves.extend(['back'] * abs(row_diff))
+        
+    # Add horizontal movements
+    if col_diff > 0:
+        moves.extend(['right'] * col_diff)
+    elif col_diff < 0:
+        moves.extend(['left'] * abs(col_diff))
+        
+    return moves
 class GridState(Enum):
     TRANSPARENT = 1
     REFLECTANCE = 2
@@ -336,8 +413,8 @@ class VideoStreamClient:
                 break
 
 def main():
-    st.set_page_config(page_title="Video Stream with Grid Overlay", layout="wide")
-    st.title("Video Stream with Grid Overlay")
+    st.set_page_config(page_title="Robot Control & Video Stream", layout="wide")
+    st.title("Robot Control & Video Stream")
     
     # Initialize session state
     if 'client' not in st.session_state:
@@ -345,19 +422,29 @@ def main():
         st.session_state['stream_thread'] = None
         st.session_state['overlay_enabled'] = False
         st.session_state['current_state'] = GridState.TRANSPARENT
+        st.session_state['robot_client'] = RobotClient('localhost', 8001)  # Initialize robot client
+        st.session_state['current_grid'] = 5  # Start at center position
     
     # Sidebar controls
     with st.sidebar:
         st.header("Connection Settings")
-        host = st.text_input("Host", value="localhost")
-        port = st.number_input("Port", value=8000, min_value=1, max_value=65535)
+        
+        # Video stream connection settings
+        st.subheader("Video Stream")
+        video_host = st.text_input("Video Host", value="localhost")
+        video_port = st.number_input("Video Port", value=8000, min_value=1, max_value=65535)
+        
+        # Robot connection settings
+        st.subheader("Robot Control")
+        robot_host = st.text_input("Robot Host", value="localhost")
+        robot_port = st.number_input("Robot Port", value=8001, min_value=1, max_value=65535)
         
         # Connection controls
         col1, col2 = st.columns(2)
         with col1:
             if not st.session_state['client'].connected:
-                if st.button("Connect", use_container_width=True):
-                    if st.session_state['client'].connect(host, port):
+                if st.button("Connect Video", use_container_width=True):
+                    if st.session_state['client'].connect(video_host, video_port):
                         st.session_state['stream_thread'] = threading.Thread(
                             target=st.session_state['client'].update_frame
                         )
@@ -365,10 +452,59 @@ def main():
                         st.session_state['stream_thread'].start()
                         st.rerun()
             else:
-                if st.button("Disconnect", use_container_width=True):
+                if st.button("Disconnect Video", use_container_width=True):
                     st.session_state['client'].disconnect()
                     st.session_state['stream_thread'] = None
                     st.rerun()
+        
+        with col2:
+            if not st.session_state['robot_client'].connected:
+                if st.button("Connect Robot", use_container_width=True):
+                    if st.session_state['robot_client'].connect():
+                        st.success("Robot connected")
+                        st.rerun()
+            else:
+                if st.button("Disconnect Robot", use_container_width=True):
+                    st.session_state['robot_client'].disconnect()
+                    st.rerun()
+        
+        # Robot Control Grid
+        if st.session_state['robot_client'].connected:
+            st.header("Robot Control Grid")
+            
+            # Create 3x3 grid of buttons
+            for row in range(3):
+                cols = st.columns(3)
+                for col in range(3):
+                    grid_num = row * 3 + col + 1
+                    with cols[col]:
+                        # Highlight current position
+                        if grid_num == st.session_state['current_grid']:
+                            button_label = f"[{grid_num}]"
+                        else:
+                            button_label = str(grid_num)
+                            
+                        if st.button(button_label, key=f"grid_{grid_num}", use_container_width=True):
+                            if grid_num != st.session_state['current_grid']:
+                                # Calculate movement sequence
+                                moves = get_movement_sequence(
+                                    st.session_state['current_grid'],
+                                    grid_num
+                                )
+                                
+                                # Execute movements
+                                success = True
+                                for move in moves:
+                                    if not st.session_state['robot_client'].send_command(move):
+                                        success = False
+                                        break
+                                
+                                if success:
+                                    st.session_state['current_grid'] = grid_num
+                                    st.success(f"Moved to position {grid_num}")
+                                else:
+                                    st.error("Movement failed")
+                                st.rerun()
         
         # Grid overlay controls
         st.header("Grid Overlay Controls")
@@ -387,19 +523,16 @@ def main():
                     if st.button("Transparent (1)", key="btn_transparent"):
                         st.session_state['current_state'] = GridState.TRANSPARENT
                         st.session_state['client'].grid_manager.set_state(GridState.TRANSPARENT)
-                        st.info("Set to Transparent Grid")
                 
                 with col2:
                     if st.button("Reflectance (2)", key="btn_reflectance"):
                         st.session_state['current_state'] = GridState.REFLECTANCE
                         st.session_state['client'].grid_manager.set_state(GridState.REFLECTANCE)
-                        st.info("Set to Reflectance Grid")
                 
                 with col3:
                     if st.button("Stressed (3)", key="btn_stressed"):
                         st.session_state['current_state'] = GridState.STRESSED
                         st.session_state['client'].grid_manager.set_state(GridState.STRESSED)
-                        st.info("Set to Stressed Grid")
                 
                 # Display current state
                 st.info(f"Current Grid: {st.session_state['current_state'].name}")
@@ -407,7 +540,7 @@ def main():
                 # Transparency control
                 transparency = st.slider("Grid Transparency", 0.0, 1.0, 0.8, 0.1)
                 st.session_state['client'].grid_manager.transparency_factor = transparency
-                
+            
             if overlay_enabled != st.session_state.get('overlay_enabled'):
                 st.session_state['overlay_enabled'] = overlay_enabled
                 if not overlay_enabled:
@@ -415,25 +548,11 @@ def main():
                 st.rerun()
         else:
             st.warning("Grid overlay not available - missing grid files")
-            if st.button("Check Grid Files"):
-                grid_files = {
-                    "Transparent Grid": "transparent_grid.png",
-                    "Reflectance Grid": "reflectance_grid.png",
-                    "Stressed Grid": "reflectance_grid_stressed.png"
-                }
-                missing_files = []
-                for name, file in grid_files.items():
-                    if not os.path.exists(file):
-                        missing_files.append(name)
-                if missing_files:
-                    st.error(f"Missing files: {', '.join(missing_files)}")
-                else:
-                    st.success("All grid files found!")
         
         # Status information
         st.header("Stream Status")
         if st.session_state['client'].connected:
-            st.success("Connected")
+            st.success("Video Connected")
             
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -443,7 +562,7 @@ def main():
             with col3:
                 st.metric("Reconnects", st.session_state['client'].reconnect_count)
         else:
-            st.warning("Not Connected")
+            st.warning("Video Not Connected")
     
     # Main video display
     if st.session_state['client'].connected:
@@ -458,13 +577,16 @@ def main():
             2. Reflectance Grid
             3. Stressed Grid
         - Use the slider to adjust grid transparency
+        
+        ### Robot Control
+        - Use the numbered grid in the sidebar to move the robot
+        - Current position is highlighted with brackets
         """)
         
         while st.session_state['client'].connected:
             try:
                 frame = st.session_state['client'].frame_queue.get(timeout=0.5)
                 if frame is not None:
-                    # Apply overlay in main thread if enabled
                     if st.session_state.get('overlay_enabled', False) and st.session_state['client'].grid_manager:
                         frame = st.session_state['client'].grid_manager.overlay_grid(frame)
                     
@@ -491,19 +613,6 @@ def main():
         status_container.empty()
     else:
         st.info("Connect to the video stream using the sidebar controls")
-        
-        if st.session_state['client'].grid_manager is None:
-            st.warning("Grid overlay system not initialized. Please check grid files.")
-            st.write("Required grid files:")
-            for name, path in {
-                "Transparent Grid": "transparent_grid.png",
-                "Reflectance Grid": "reflectance_grid.png",
-                "Stressed Grid": "reflectance_grid_stressed.png"
-            }.items():
-                if os.path.exists(path):
-                    st.success(f"✓ {name} found")
-                else:
-                    st.error(f"✗ {name} missing")
 
 if __name__ == "__main__":
     main()
