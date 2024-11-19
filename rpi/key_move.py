@@ -24,7 +24,7 @@ Note:
 import serial
 import curses
 import time
-from automation2 import automate_inputs
+from automation_optimised import automate_inputs
 from constants import *
 
 arduino = serial.Serial('/dev/ttyACM0', 9600)  # Port and baudrate
@@ -34,11 +34,6 @@ curses.noecho()
 curses.cbreak()
 screen.keypad(True)
 
-screen.move(0, 0)
-screen.addstr("Starting program... Press 'q' to quit.\n")
-screen.addstr("Press arrow keys to move the robot.\n")
-screen.addstr("Press ' ' or 's' to brake.\n")
-screen.refresh()
 
 
 def bytes_pose_to_tuple(b: bytes):
@@ -49,21 +44,33 @@ def bytes_pose_to_tuple(b: bytes):
 
 def front_grid():
   arduino.write(b'F')
-  time.sleep(1.92)
+  time.sleep(3.38)
   arduino.write(b'S')
 
 def back_grid():
   arduino.write(b'B')
-  time.sleep(1.89)
+  time.sleep(3.36)
   arduino.write(b'S')
 
 def right_grid():
   arduino.write(b'R')
-  time.sleep(1.82)
+  time.sleep(2.15)
+
   arduino.write(b'S')
+
+  time.sleep(0.2)
+  arduino.write(b'F')
+  time.sleep(0.2)
+  arduino.write(b'S')
+
 
 try:
   while True:
+    screen.move(0, 0)
+    screen.addstr("Starting program... Press 'q' to quit.\n")
+    screen.addstr("Press arrow keys to move the robot.\n")
+    screen.addstr("Press ' ' or 's' to brake.\n")
+    screen.refresh()
     char = screen.getch()
     if char == ord('q'):
       arduino.write(b'S')  # brake
@@ -82,7 +89,8 @@ try:
       arduino.write(b'R')
 
     elif char == ord(' ') or char == ord('s'):
-      arduino.write(b'S')  # brake
+        arduino.write(b'S')  # brake:wq
+        
 
     elif char == ord('j'):
       front_grid()
@@ -99,26 +107,29 @@ try:
       arduino.write(b'S')
 
     elif char == ord('x'):
-      screen.addstr('Enter current pose in format: x y theta(U/D/L/R) (matrix indices)')
-      curr_pose = bytes_pose_to_tuple(screen.getstr())
+        try: 
+            screen.addstr('Enter current pose in format: x y theta(U/D/L/R) (matrix indices)')
+            curr_pose = bytes_pose_to_tuple(screen.getstr())
 
-      screen.addstr('Enter final pose in format: x y (matrix indices)')
-      final_pose = bytes_pose_to_tuple(screen.getstr())
+            screen.addstr('Enter final pose in format: x y (matrix indices)')
+            final_pose = bytes_pose_to_tuple(screen.getstr())
 
-      screen.addstr(f'Starting at (({curr_pose[0]},{curr_pose[1]}),{curr_pose[2]}), \nFinishing at ({final_pose[0]},{final_pose[1]})\n')  
+            screen.addstr(f'Starting at (({curr_pose[0]},{curr_pose[1]}),{curr_pose[2]}), \nFinishing at ({final_pose[0]},{final_pose[1]})\n')  
       
-      poses, curr_theta = automate_inputs(((curr_pose[0],curr_pose[1]),curr_pose[2]),(final_pose[0],final_pose[1]),(GRID_X,GRID_Y))
+            poses, curr_theta = automate_inputs(((curr_pose[0],curr_pose[1]),curr_pose[2]),(final_pose[0],final_pose[1]),(GRID_X,GRID_Y))
 
-      screen.addstr(f'Actions being done {poses}\n')
+            screen.addstr(f'Actions being done {poses}\n')
 
-      for pose in poses:
-        if pose == 'f':
-          front_grid()
-        if pose == 'r':
-          right_grid()
-        if pose == 'b':
-          back_grid()
-        time.sleep(1)
+            for pose in poses:
+                if pose == 'f':
+                    front_grid()
+                if pose == 'r':
+                    right_grid()
+                if pose == 'b':
+                    back_grid()
+                time.sleep(1)
+        except:
+            screen.addstr('ERROR: Invalid Input Format!!!\n')
 
 
 except curses.error:
