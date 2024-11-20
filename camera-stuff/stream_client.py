@@ -14,121 +14,70 @@ import PIL.Image as Image
 import streamlit as st
 import socket
 import json
+import flask
+import requests
 
 class RobotClient:
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.socket = None
+    def __init__(self, base_url='http://localhost:5000'):
+        self.base_url = base_url
         self.connected = False
         self.last_error = None
         self.connection_status = "Not connected"
         
     def connect(self):
         try:
-            st.info(f"Attempting to connect to robot at {self.host}:{self.port}...")
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(5)  # 5 second timeout for connection
-            
-            # Try to connect
-            st.info("Creating socket connection...")
-            self.socket.connect((self.host, self.port))
-            st.info("Socket connection created successfully.")
-            self.socket.settimeout(2)  # 2 second timeout for operations
-            
             # Test connection with a stop command
-            st.info("Testing connection...")
-            if self.send_command('stop'):
+            response = self._send_command('stop')
+            if response:
                 self.connected = True
                 self.connection_status = "Connected"
                 self.last_error = None
                 return True
-            else:
-                raise ConnectionError("Failed to verify connection")
-            
-        except ConnectionRefusedError:
-            self.last_error = "Connection refused - Is the robot server running?"
-            self.connection_status = "Connection refused"
-            st.error(self.last_error)
-            
-        except socket.timeout:
-            self.last_error = "Connection timed out - Check if robot is reachable"
-            self.connection_status = "Timeout"
-            st.error(self.last_error)
-            
-        except Exception as e:
+            return False
+        
+        except requests.exceptions.RequestException as e:
             self.last_error = f"Connection error: {str(e)}"
             self.connection_status = "Error"
             st.error(self.last_error)
-            
-        self.connected = False
-        if self.socket:
-            self.socket.close()
-            self.socket = None
-        return False
+            return False
             
     def disconnect(self):
-        if self.socket:
-            try:
-                self.socket.shutdown(socket.SHUT_RDWR)
-            except:
-                pass
-            self.socket.close()
         self.connected = False
         self.connection_status = "Disconnected"
-        self.socket = None
         
     def send_command(self, command):
-        if not self.connected:
-            st.error("Not connected to robot")
-            return False
-            
         try:
-            # Prepare command data
-            command_dict = {'command': command}
-            command_data = json.dumps(command_dict).encode()
-            
-            # Send size first, then data (matching server protocol)
-            message_size = struct.pack("L", len(command_data))
-            self.socket.sendall(message_size)
-            self.socket.sendall(command_data)
-            
-            # Receive response size first
-            size_data = self.socket.recv(struct.calcsize("L"))
-            if not size_data:
-                raise ConnectionError("Connection broken while receiving size")
-            
-            message_size = struct.unpack("L", size_data)[0]
-            
-            # Receive response data
-            received_data = b""
-            while len(received_data) < message_size:
-                chunk = self.socket.recv(min(message_size - len(received_data), 4096))
-                if not chunk:
-                    raise ConnectionError("Connection broken while receiving data")
-                received_data += chunk
-            
-            result = json.loads(received_data.decode())
-            
-            if result.get('status') == 'success':
-                return True
-            else:
-                st.error(f"Command failed: {result.get('message', 'Unknown error')}")
-                return False
-                
+            response = self._send_command(command)
+            return response is not None
         except Exception as e:
             st.error(f"Error sending command: {str(e)}")
-            self.connected = False
             return False
+    
+    def _send_command(self, command):
+        if not self.connected:
+            st.error("Not connected to robot")
+            return None
+        
+        try:
+            response = requests.post(
+                f'{self.base_url}/control', 
+                json={'command': command},
+                timeout=5
+            )
+            response.raise_for_status()
+            return response.json()
+        
+        except requests.exceptions.RequestException as e:
+            self.connected = False
+            st.error(f"Command failed: {str(e)}")
+            return None
 
     def get_status(self):
         """Get detailed connection status"""
         return {
             'connected': self.connected,
             'status': self.connection_status,
-            'last_error': self.last_error,
-            'host': self.host,
-            'port': self.port
+            'last_error': self.last_error
         }
 
 def display_robot_status(robot_client):
