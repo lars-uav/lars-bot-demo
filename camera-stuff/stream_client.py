@@ -465,7 +465,7 @@ def main():
         st.session_state['stream_thread'] = None
         st.session_state['overlay_enabled'] = False
         st.session_state['current_state'] = GridState.TRANSPARENT
-        st.session_state['robot_client'] = RobotClient('localhost', 8001)  # Initialize robot client
+        st.session_state['robot_client'] = RobotClient('http://localhost:8001')
         st.session_state['current_grid'] = 5  # Start at center position
     
     # Sidebar controls
