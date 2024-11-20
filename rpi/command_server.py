@@ -2,6 +2,8 @@ import socket
 import serial
 import time
 import json
+import threading
+import struct
 
 class RobotController:
     def __init__(self, serial_port='/dev/ttyUSB0', baud_rate=9600):
@@ -43,77 +45,117 @@ class RobotController:
     def close(self):
         self.arduino.close()
 
-class RobotServer:
-    def __init__(self, host='0.0.0.0', port=5000):
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((host, port))
-        self.server_socket.listen(1)
-        self.robot = RobotController()
-        print(f"Server listening on {host}:{port}")
+def send_response(client_socket, response_dict):
+    """Send a response using the same protocol structure as the video server"""
+    try:
+        # Convert response to JSON and encode
+        response_data = json.dumps(response_dict).encode()
         
-    def handle_command(self, command):
-        command = command.strip().lower()
-        if command == 'front':
-            return self.robot.front_grid()
-        elif command == 'back':
-            return self.robot.back_grid()
-        elif command == 'right':
-            return self.robot.right_grid()
-        elif command == 'left':
-            return self.robot.left_grid()
-        elif command == 'stop':
-            return self.robot.emergency_stop()
-        else:
-            return f"Unknown command: {command}"
+        # Pack and send the message size first
+        message_size = struct.pack("L", len(response_data))
+        client_socket.sendall(message_size + response_data)
+        return True
+    except (ConnectionResetError, BrokenPipeError, socket.error):
+        return False
 
-    def run(self):
-        try:
-            while True:
-                print("Waiting for connection...")
-                client_socket, address = self.server_socket.accept()
-                print(f"Connected to {address}")
+def handle_client(client_socket, addr, robot):
+    """Handle individual client connection"""
+    print(f'Handling connection from {addr}')
+    
+    try:
+        while True:
+            # Receive message size first (long integer)
+            size_data = client_socket.recv(struct.calcsize("L"))
+            if not size_data:
+                break
                 
-                try:
-                    while True:
-                        # Receive command
-                        data = client_socket.recv(1024).decode()
-                        if not data:
-                            break
-                            
-                        # Process command
-                        try:
-                            command = json.loads(data)['command']
-                            print(f"Received command: {command}")
-                            
-                            # Execute command
-                            result = self.handle_command(command)
-                            
-                            # Send response
-                            response = json.dumps({
-                                'status': 'success',
-                                'message': result
-                            })
-                            client_socket.send(response.encode())
-                            
-                        except json.JSONDecodeError:
-                            response = json.dumps({
-                                'status': 'error',
-                                'message': 'Invalid command format'
-                            })
-                            client_socket.send(response.encode())
-                            
-                except Exception as e:
-                    print(f"Error handling client: {e}")
-                finally:
-                    client_socket.close()
+            # Unpack message size
+            message_size = struct.unpack("L", size_data)[0]
+            
+            # Receive the actual command data
+            received_data = b""
+            while len(received_data) < message_size:
+                chunk = client_socket.recv(min(message_size - len(received_data), 4096))
+                if not chunk:
+                    raise ConnectionError("Connection broken")
+                received_data += chunk
+            
+            # Process command
+            try:
+                command = json.loads(received_data.decode())['command']
+                print(f"Received command: {command}")
+                
+                # Execute command
+                result = ""
+                if command == 'front':
+                    result = robot.front_grid()
+                elif command == 'back':
+                    result = robot.back_grid()
+                elif command == 'right':
+                    result = robot.right_grid()
+                elif command == 'left':
+                    result = robot.left_grid()
+                elif command == 'stop':
+                    result = robot.emergency_stop()
+                else:
+                    result = f"Unknown command: {command}"
+                
+                # Send response
+                response = {
+                    'status': 'success',
+                    'message': result
+                }
+                if not send_response(client_socket, response):
+                    break
+                
+            except json.JSONDecodeError:
+                response = {
+                    'status': 'error',
+                    'message': 'Invalid command format'
+                }
+                if not send_response(client_socket, response):
+                    break
                     
-        except KeyboardInterrupt:
-            print("\nShutting down server...")
-        finally:
-            self.robot.close()
-            self.server_socket.close()
+    except Exception as e:
+        print(f"Error with client {addr}: {e}")
+    finally:
+        client_socket.close()
+        print(f"Connection closed for {addr}")
+
+def start_robot_server(host='0.0.0.0', port=5000):
+    print("Initializing robot controller...")
+    robot = RobotController()
+    print("Robot controller initialized successfully!")
+    
+    # Create socket server
+    try:
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((host, port))  # Make sure it's using '0.0.0.0'
+        server_socket.listen(5)
+        print(f"Server listening on {host}:{port}")
+    except Exception as e:
+        print(f"Socket error: {e}")
+        robot.close()
+        return
+        
+    # Accept multiple clients
+    try:
+        while True:
+            print("Waiting for a new client connection...")
+            client_socket, addr = server_socket.accept()
+            print(f"Accepted connection from {addr}")
+            client_thread = threading.Thread(
+                target=handle_client,
+                args=(client_socket, addr, robot)
+            )
+            client_thread.daemon = True
+            client_thread.start()
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+    finally:
+        robot.close()
+        server_socket.close()
 
 if __name__ == "__main__":
-    server = RobotServer()
-    server.run()
+    start_robot_server()

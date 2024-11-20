@@ -11,6 +11,10 @@ import os
 import struct
 import pickle
 import PIL.Image as Image
+import streamlit as st
+import socket
+import json
+
 class RobotClient:
     def __init__(self, host, port):
         self.host = host
@@ -26,24 +30,21 @@ class RobotClient:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.settimeout(5)  # 5 second timeout for connection
             
-            # Try to connect and print connection details
+            # Try to connect
             st.info("Creating socket connection...")
             self.socket.connect((self.host, self.port))
+            st.info("Socket connection created successfully.")
             self.socket.settimeout(2)  # 2 second timeout for operations
             
-            # Test connection with a simple command
+            # Test connection with a stop command
             st.info("Testing connection...")
-            test_data = json.dumps({'command': 'test'}).encode()
-            self.socket.send(test_data)
-            
-            # Wait for response
-            response = self.socket.recv(1024).decode()
-            st.info(f"Received response: {response}")
-            
-            self.connected = True
-            self.connection_status = "Connected"
-            self.last_error = None
-            return True
+            if self.send_command('stop'):
+                self.connected = True
+                self.connection_status = "Connected"
+                self.last_error = None
+                return True
+            else:
+                raise ConnectionError("Failed to verify connection")
             
         except ConnectionRefusedError:
             self.last_error = "Connection refused - Is the robot server running?"
@@ -53,11 +54,6 @@ class RobotClient:
         except socket.timeout:
             self.last_error = "Connection timed out - Check if robot is reachable"
             self.connection_status = "Timeout"
-            st.error(self.last_error)
-            
-        except json.JSONDecodeError:
-            self.last_error = "Invalid response from robot"
-            self.connection_status = "Protocol error"
             st.error(self.last_error)
             
         except Exception as e:
@@ -88,14 +84,31 @@ class RobotClient:
             return False
             
         try:
-            # Send command
-            data = json.dumps({'command': command})
-            self.socket.send(data.encode())
+            # Prepare command data
+            command_dict = {'command': command}
+            command_data = json.dumps(command_dict).encode()
             
-            # Wait for response with timeout
-            self.socket.settimeout(2)
-            response = self.socket.recv(1024).decode()
-            result = json.loads(response)
+            # Send size first, then data (matching server protocol)
+            message_size = struct.pack("L", len(command_data))
+            self.socket.sendall(message_size)
+            self.socket.sendall(command_data)
+            
+            # Receive response size first
+            size_data = self.socket.recv(struct.calcsize("L"))
+            if not size_data:
+                raise ConnectionError("Connection broken while receiving size")
+            
+            message_size = struct.unpack("L", size_data)[0]
+            
+            # Receive response data
+            received_data = b""
+            while len(received_data) < message_size:
+                chunk = self.socket.recv(min(message_size - len(received_data), 4096))
+                if not chunk:
+                    raise ConnectionError("Connection broken while receiving data")
+                received_data += chunk
+            
+            result = json.loads(received_data.decode())
             
             if result.get('status') == 'success':
                 return True
@@ -103,11 +116,6 @@ class RobotClient:
                 st.error(f"Command failed: {result.get('message', 'Unknown error')}")
                 return False
                 
-        except socket.timeout:
-            st.error("Command timed out - no response from robot")
-            self.connected = False
-            return False
-            
         except Exception as e:
             st.error(f"Error sending command: {str(e)}")
             self.connected = False
@@ -143,7 +151,6 @@ def display_robot_status(robot_client):
         4. Check if any firewalls are blocking the connection
         5. Try restarting the robot server
         """)
-
         
 def calculate_grid_position(grid_number):
     """Convert grid number (1-9) to x, y coordinates"""
@@ -523,8 +530,8 @@ def main():
         
         # Robot connection settings
         st.subheader("Robot Control")
-        robot_host = st.text_input("Robot Host", value="localhost")
-        robot_port = st.number_input("Robot Port", value=8001, min_value=1, max_value=65535)
+        robot_host = st.text_input("Robot Host", value="10.1.59.194")
+        robot_port = st.number_input("Robot Port", value=5000, min_value=1, max_value=65535)
         
         # Connection controls
         col1, col2 = st.columns(2)
