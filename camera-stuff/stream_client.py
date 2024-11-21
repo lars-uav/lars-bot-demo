@@ -16,9 +16,11 @@ import socket
 import json
 import flask
 import requests
+import subprocess
+import sys
 
 class RobotClient:
-    def __init__(self, base_url='http://localhost:5000'):
+    def __init__(self, base_url='http://localhost:8001'):
         self.base_url = base_url
         self.connected = False
         self.last_error = None
@@ -26,13 +28,26 @@ class RobotClient:
         
     def connect(self):
         try:
-            # Test connection with a stop command
-            response = self._send_command('stop')
-            if response:
-                self.connected = True
-                self.connection_status = "Connected"
-                self.last_error = None
-                return True
+            # Attempt to start the server if not running
+            self._start_server()
+            
+            # Try health check
+            response = requests.get(f'{self.base_url}/', timeout=5)
+            connection_data = response.json()
+            
+            if connection_data.get('status') == 'ok':
+                # Verify connection with stop command
+                connection_response = self._send_command('check_connection')
+                
+                if connection_response and connection_response.get('connected', False):
+                    self.connected = True
+                    self.connection_status = "Connected"
+                    self.last_error = None
+                    st.success("Robot connection established successfully")
+                    return True
+            
+            # If we get here, connection failed
+            st.error("Unable to establish robot connection")
             return False
         
         except requests.exceptions.RequestException as e:
@@ -40,6 +55,31 @@ class RobotClient:
             self.connection_status = "Error"
             st.error(self.last_error)
             return False
+    
+    def _start_server(self):
+        """
+        Attempt to start the robot server if not already running
+        This method assumes the server script is in the same directory
+        """
+        try:
+            # Get the directory of the current script
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            server_script = os.path.join(script_dir, 'robot_server_runner.py')
+            
+            # Check if server is already running
+            try:
+                requests.get(f'{self.base_url}/', timeout=1)
+                return  # Server is already running
+            except requests.exceptions.RequestException:
+                # Server not running, try to start it
+                subprocess.Popen([sys.executable, server_script], 
+                                 stdout=subprocess.PIPE, 
+                                 stderr=subprocess.PIPE)
+                
+                # Give the server some time to start
+                time.sleep(3)
+        except Exception as e:
+            st.error(f"Error starting robot server: {e}")
             
     def disconnect(self):
         self.connected = False
@@ -55,8 +95,10 @@ class RobotClient:
     
     def _send_command(self, command):
         if not self.connected:
-            st.error("Not connected to robot")
-            return None
+            # Try to reconnect
+            if not self.connect():
+                st.error("Not connected to robot")
+                return None
         
         try:
             response = requests.post(
@@ -69,6 +111,7 @@ class RobotClient:
         
         except requests.exceptions.RequestException as e:
             self.connected = False
+            self.connection_status = "Disconnected"
             st.error(f"Command failed: {str(e)}")
             return None
 
@@ -501,10 +544,11 @@ def main():
                     st.rerun()
         
         with col2:
-            if not st.session_state['robot_client'].connected:
-                if st.button("Connect Robot", use_container_width=True):
+            if 'robot_client' not in st.session_state:
+                st.session_state['robot_client'] = RobotClient(host='10.1.59.194', port=8001)
+                if st.button("Connect Robot"):
                     if st.session_state['robot_client'].connect():
-                        st.success("Robot connected")
+                        st.success("Robot connected successfully")
                         st.rerun()
             else:
                 if st.button("Disconnect Robot", use_container_width=True):
