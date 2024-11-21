@@ -13,6 +13,87 @@ import struct
 import pickle
 from enum import Enum
 
+# Grid and Automation Support Functions
+def cartesian_to_matrix_index(coord, grid_dim):
+    x, y = coord
+    n, m = grid_dim
+    return y - (m-1), x
+
+def matrix_index_to_cartesian(coord, grid_dim):
+    y, x = coord
+    n, m = grid_dim
+    return x, (m-1) - y
+
+def automate_inputs(pose: tuple[tuple[int, int], str], measurement_position: tuple[int, int], grid_dim: tuple[int, int]):
+    indexes, theta1 = pose
+    x1, y1 = matrix_index_to_cartesian(indexes, grid_dim)
+    indexes = measurement_position 
+    x2, y2 = matrix_index_to_cartesian(indexes, grid_dim)
+    theta1 = theta1.lower()
+    
+    x_disp = x2 - x1
+    y_disp = y2 - y1
+    movements = []
+    curr_theta = theta1
+
+    if theta1 == "u":
+        if y_disp > 0:
+            movements.extend("f" * y_disp)
+        elif y_disp < 0:
+            movements.extend("b" * abs(y_disp))
+        if x_disp > 0:
+            movements.extend("r")
+            movements.extend("f" * x_disp)
+            curr_theta = "r"
+        elif x_disp < 0:
+            movements.extend("l")
+            movements.extend("f" * abs(x_disp))
+            curr_theta = "l"
+
+    elif theta1 == "d":
+        if y_disp < 0:
+            movements.extend("f" * abs(y_disp))
+        elif y_disp > 0:
+            movements.extend("b" * y_disp)
+        if x_disp < 0:
+            movements.extend("r")
+            movements.extend("f" * abs(x_disp))
+            curr_theta = "l"
+        elif x_disp > 0:
+            movements.extend("l")
+            movements.extend("f" * x_disp)
+            curr_theta = "r"
+
+    elif theta1 == "r":
+        if x_disp > 0:
+            movements.extend("f" * x_disp)
+        elif x_disp < 0:
+            movements.extend("b" * abs(x_disp))
+        if y_disp < 0:
+            movements.extend("r")
+            movements.extend("f" * abs(y_disp))
+            curr_theta = "d"
+        elif y_disp > 0:
+            movements.extend("l")
+            movements.extend("f" * y_disp)
+            curr_theta = "u"
+
+    elif theta1 == "l":
+        if x_disp < 0:
+            movements.extend("f" * abs(x_disp))
+        elif x_disp > 0:
+            movements.extend("b" * x_disp)
+        if y_disp > 0:
+            movements.extend("r")
+            movements.extend("f" * y_disp)
+            curr_theta = "u"
+        elif y_disp < 0:
+            movements.extend("l")
+            movements.extend("f" * abs(y_disp))
+            curr_theta = "d"
+
+    return movements, curr_theta
+
 class GridState(Enum):
     TRANSPARENT = 1
     REFLECTANCE = 2
@@ -21,31 +102,20 @@ class GridState(Enum):
 
 class GridOverlayManager:
     def __init__(self):
-        # Grid paths - store as relative paths or update with your paths
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         self.grid_paths = {
-            'transparent': "camera-stuff/transparent_grid.png",
-            'reflectance': "camera-stuff/reflectance_grid.png",
-            'stressed': "camera-stuff/reflectance_grid_stressed.png"
+            'transparent': os.path.join(current_dir, "grids", "transparent_grid.png"),
+            'reflectance': os.path.join(current_dir, "grids", "reflectance_grid.png"),
+            'stressed': os.path.join(current_dir, "grids", "stressed_grid.png")
         }
         
-        # Status messages
-        self.status_messages = {
-            GridState.TRANSPARENT: "Transparent Grid Active",
-            GridState.REFLECTANCE: "Reflectance Grid Active",
-            GridState.STRESSED: "Stress Analysis Grid Active"
-        }
-        
-        # Initialize state
         self.state = GridState.TRANSPARENT
         self.transparency_factor = 0.8
-        
-        # Initialize grids
         self.grids = {}
         self.has_alpha = False
         self._load_grids()
     
     def _load_grids(self):
-        """Load and verify grid images"""
         missing_files = []
         for name, path in self.grid_paths.items():
             if not os.path.exists(path):
@@ -60,26 +130,19 @@ class GridOverlayManager:
             self.grids[name] = grid
         
         if missing_files:
-            st.warning(f"Missing grid files: {', '.join(missing_files)}")
+            print(f"Missing grid files: {', '.join(missing_files)}")
             return False
             
         self.has_alpha = all(grid.shape[2] == 4 for grid in self.grids.values())
         return True
 
     def overlay_grid(self, frame):
-        """Apply grid overlay to frame"""
         if not self.grids:
             return frame
 
         result = frame.copy()
         height, width = frame.shape[:2]
         
-        # Calculate grid dimensions - Now full frame size
-        grid_size = min(height, width)
-        x_offset = (width - grid_size) // 2
-        y_offset = (height - grid_size) // 2
-        
-        # Get current grid based on state
         current_grid = None
         if self.state == GridState.TRANSPARENT:
             current_grid = self.grids.get('transparent')
@@ -92,12 +155,14 @@ class GridOverlayManager:
             return result
             
         try:
-            # Resize grid to frame size
+            grid_size = min(height, width)
+            x_offset = (width - grid_size) // 2
+            y_offset = (height - grid_size) // 2
+            
             overlay_resized = cv2.resize(current_grid, (grid_size, grid_size))
             y1, y2 = y_offset, y_offset + grid_size
             x1, x2 = x_offset, x_offset + grid_size
             
-            # Apply overlay with alpha channel if available
             if self.has_alpha and overlay_resized.shape[2] == 4:
                 overlay_rgb = overlay_resized[:, :, :3]
                 overlay_alpha = (overlay_resized[:, :, 3] / 255.0) * self.transparency_factor
@@ -107,47 +172,29 @@ class GridOverlayManager:
                     result[y1:y2, x1:x2] * (1 - alpha_3d)
                 ).astype(np.uint8)
             else:
-                # Fallback to simple overlay if no alpha channel
                 result[y1:y2, x1:x2] = cv2.addWeighted(
                     overlay_resized, self.transparency_factor,
                     result[y1:y2, x1:x2], 1 - self.transparency_factor, 
                     0
                 )
             
-            # Add status message at the bottom of the frame
-            if self.state in self.status_messages:
-                message = self.status_messages[self.state]
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                font_scale = 1.0
-                thickness = 2
-                text_size = cv2.getTextSize(message, font, font_scale, thickness)[0]
-                text_x = (width - text_size[0]) // 2
-                text_y = height - 30  # Position at bottom
-                
-                # Add text shadow/outline for better visibility
-                cv2.putText(result, message, (text_x, text_y), font, font_scale, (0, 0, 0), thickness + 2)
-                cv2.putText(result, message, (text_x, text_y), font, font_scale, (255, 255, 255), thickness)
-                
             return result
             
         except Exception as e:
-            st.error(f"Error applying overlay: {str(e)}")
+            print(f"Error applying overlay: {str(e)}")
             return frame
 
     def set_state(self, new_state):
-        """Set the current grid state"""
         if new_state in GridState:
             self.state = new_state
 
 class RobotClient:
     def __init__(self, host, port=8001):
-        """Initialize robot client with separate host and port"""
         self.base_url = f"http://{host}:{port}"
         self.session = requests.Session()
         self.connected = False
         
     def connect(self):
-        """Establish connection to robot server"""
         try:
             response = self.session.get(f"{self.base_url}/", timeout=5)
             data = response.json()
@@ -163,12 +210,10 @@ class RobotClient:
             return False
             
     def disconnect(self):
-        """Disconnect from robot server"""
         self.connected = False
         self.session.close()
         
     def send_command(self, command):
-        """Send single-letter command to robot"""
         if not self.connected:
             st.error("Not connected to robot")
             return False
@@ -185,54 +230,45 @@ class RobotClient:
         except Exception as e:
             st.error(f"Command failed: {str(e)}")
             return False
+
 class VideoStreamClient:
     def __init__(self):
         self.client_socket = None
         self.connected = False
-        self.lock = threading.Lock()
-        self.last_frame_time = time.time()
-        self.frame_count = 0
-        self.start_time = time.time()
-        self.fps = 0
         self.frame_queue = queue.Queue(maxsize=30)
         self.stop_event = threading.Event()
-        self.reconnect_count = 0
-        self.max_reconnects = 3
+        self.fps = 0
+        self.frame_count = 0
+        self.start_time = time.time()
         
-        # Initialize grid manager
         try:
             self.grid_manager = GridOverlayManager()
         except Exception as e:
-            st.error(f"Error initializing grid overlay: {str(e)}")
+            print(f"Error initializing grid overlay: {e}")
             self.grid_manager = None
 
-        
     def connect(self, host, port):
         try:
             if self.client_socket:
                 self.client_socket.close()
                 
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.settimeout(5)  # Connection timeout
-            st.info(f"Attempting to connect to {host}:{port}...")
+            self.client_socket.settimeout(5)
             self.client_socket.connect((host, port))
             
-            # Configure socket
             self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
-            self.client_socket.settimeout(1.0)  # Operation timeout
+            self.client_socket.settimeout(1.0)
             
             self.connected = True
             self.frame_count = 0
             self.start_time = time.time()
             self.stop_event.clear()
-            self.reconnect_count = 0
-            st.success("Connected successfully")
             return True
         except Exception as e:
-            st.error(f"Connection failed: {str(e)}")
+            st.error(f"Video connection failed: {str(e)}")
             return False
-            
+
     def disconnect(self):
         self.stop_event.set()
         self.connected = False
@@ -242,115 +278,176 @@ class VideoStreamClient:
             except:
                 pass
             self.client_socket.close()
-        with self.lock:
-            self.current_frame = None
-        self.clear_queue()
-        
-    def clear_queue(self):
-        """Clear the frame queue"""
         while not self.frame_queue.empty():
             try:
                 self.frame_queue.get_nowait()
             except queue.Empty:
                 break
-                
+
     def receive_frame(self):
-        """Receive a single frame with improved error handling"""
         try:
-            # Get message size
-            data = self._receive_exactly(struct.calcsize("L"))
+            data = self.client_socket.recv(struct.calcsize("L"))
             if not data:
                 return None
                 
             msg_size = struct.unpack("L", data)[0]
             
-            # Get frame data
-            frame_data = self._receive_exactly(msg_size)
-            if not frame_data:
-                return None
-                
-            # Decode frame
-            encoded_frame = pickle.loads(frame_data)
-            frame = cv2.imdecode(np.frombuffer(encoded_frame, np.uint8), cv2.IMREAD_COLOR)
-            
-            if frame is None:
-                raise ValueError("Failed to decode frame")
-                
-            # Update FPS
-            self._update_fps()
-            
-            return frame
-            
-        except (socket.timeout, TimeoutError) as e:
-            print(f"Timeout receiving frame: {str(e)}")
-            self._handle_timeout()
-            return None
-        except Exception as e:
-            print(f"Stream error: {str(e)}")
-            self.disconnect()
-            return None
-            
-    def _receive_exactly(self, n):
-        """Receive exactly n bytes with timeout handling"""
-        data = bytearray()
-        start_time = time.time()
-        
-        while len(data) < n and time.time() - start_time < 2.0:  # 2 second total timeout
-            try:
-                packet = self.client_socket.recv(min(n - len(data), 4096))
+            frame_data = bytearray()
+            while len(frame_data) < msg_size:
+                packet = self.client_socket.recv(min(msg_size - len(frame_data), 4096))
                 if not packet:
                     return None
-                data.extend(packet)
-            except socket.timeout:
-                continue
+                frame_data.extend(packet)
                 
-        if len(data) < n:
-            raise TimeoutError("Incomplete frame received")
+            encoded_frame = pickle.loads(bytes(frame_data))
+            frame = cv2.imdecode(np.frombuffer(encoded_frame, np.uint8), cv2.IMREAD_COLOR)
             
-        return bytes(data)
-        
-    def _update_fps(self):
-        """Update FPS calculation"""
-        self.frame_count += 1
-        elapsed_time = time.time() - self.start_time
-        if elapsed_time > 1:
-            self.fps = self.frame_count / elapsed_time
-            self.frame_count = 0
-            self.start_time = time.time()
-        self.last_frame_time = time.time()
-        
-    def _handle_timeout(self):
-        """Handle timeout events with potential reconnection"""
-        if self.reconnect_count < self.max_reconnects:
-            print(f"Attempting reconnect {self.reconnect_count + 1}/{self.max_reconnects}")
-            self.reconnect_count += 1
-            self.disconnect()
-            time.sleep(1)  # Wait before reconnecting
-        else:
-            print("Max reconnection attempts reached")
-            self.disconnect()
+            self.frame_count += 1
+            elapsed_time = time.time() - self.start_time
+            if elapsed_time > 1:
+                self.fps = self.frame_count / elapsed_time
+                self.frame_count = 0
+                self.start_time = time.time()
+                
+            return frame
             
+        except Exception as e:
+            return None
+
     def update_frame(self):
-        """Main frame update loop - now without overlay processing"""
         while not self.stop_event.is_set() and self.connected:
-            try:
-                frame = self.receive_frame()
-                if frame is not None:
-                    # Just queue the original frame
-                    if self.frame_queue.full():
-                        try:
-                            self.frame_queue.get_nowait()
-                        except queue.Empty:
-                            pass
-                    self.frame_queue.put_nowait(frame)
+            frame = self.receive_frame()
+            if frame is not None:
+                if self.frame_queue.full():
+                    try:
+                        self.frame_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                self.frame_queue.put_nowait(frame)
+            else:
+                time.sleep(0.01)
+def calculate_movements(start_pos: tuple[int, int], start_orientation: str, end_pos: tuple[int, int], grid_dim: tuple[int, int]):
+    """Wrapper for automation function"""
+    movements, final_theta = automate_inputs((start_pos, start_orientation), end_pos, grid_dim)
+    return movements, final_theta
+
+def add_automation_panel():
+    """Creates the automation control panel for the dashboard"""
+    st.subheader("Automation Control")
+    
+    # Grid dimensions
+    grid_dim = (3, 3)
+    
+    # Create a visual representation of the grid
+    st.write("Grid Layout:")
+    grid_container = st.container()
+    with grid_container:
+        for row in range(grid_dim[0]):
+            cols = st.columns(grid_dim[1])
+            for col in range(grid_dim[1]):
+                with cols[col]:
+                    position = f"({row},{col})"
+                    st.markdown(f"<div style='text-align: center; border: 1px solid gray; padding: 10px;'>{position}</div>", 
+                              unsafe_allow_html=True)
+    
+    # Start position
+    st.write("Start Position:")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        start_x = st.number_input("X", min_value=0, max_value=grid_dim[0]-1, value=0, key="start_x")
+    with col2:
+        start_y = st.number_input("Y", min_value=0, max_value=grid_dim[1]-1, value=0, key="start_y")
+    with col3:
+        start_orientation = st.selectbox(
+            "Orientation",
+            options=['U', 'D', 'L', 'R'],
+            index=0,
+            key="start_orientation"
+        )
+    
+    # End position
+    st.write("Destination:")
+    col1, col2 = st.columns(2)
+    with col1:
+        end_x = st.number_input("X", min_value=0, max_value=grid_dim[0]-1, value=0, key="end_x")
+    with col2:
+        end_y = st.number_input("Y", min_value=0, max_value=grid_dim[1]-1, value=0, key="end_y")
+    
+    # Calculate button
+    if st.button("Calculate Path"):
+        start_pos = (start_x, start_y)
+        end_pos = (end_x, end_y)
+        
+        try:
+            movements, final_theta = automate_inputs(
+                (start_pos, start_orientation.lower()),
+                end_pos,
+                grid_dim
+            )
+            
+            if movements:
+                st.info(f"Calculated movements: {', '.join(movements).upper()}")
+                st.info(f"Final orientation will be: {final_theta.upper()}")
+                
+                # Execute movements if robot is connected
+                if st.session_state.get('robot_client') and st.session_state['robot_client'].connected:
+                    if st.button("Execute Movements", key="execute_movements"):
+                        movement_map = {
+                            'f': 'F',  # Forward
+                            'b': 'B',  # Backward
+                            'l': 'L',  # Left turn
+                            'r': 'R'   # Right turn
+                        }
+                        
+                        # Create a progress bar
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        success = True
+                        for i, move in enumerate(movements):
+                            cmd = movement_map.get(move.lower())
+                            if cmd:
+                                status_text.text(f"Executing movement {i+1}/{len(movements)}: {cmd}")
+                                if not st.session_state['robot_client'].send_command(cmd):
+                                    success = False
+                                    st.error(f"Failed executing movement: {cmd}")
+                                    break
+                                progress_bar.progress((i + 1) / len(movements))
+                                time.sleep(0.5)  # Small delay between commands
+                        
+                        if success:
+                            status_text.text("Movement sequence completed!")
+                            st.success(f"Successfully moved from {start_pos} to {end_pos}")
                 else:
-                    time.sleep(0.01)
-            except Exception as e:
-                print(f"Error in update_frame: {str(e)}")
-                self.disconnect()
-                break
+                    st.warning("Robot not connected. Please connect robot first.")
+            else:
+                st.warning("No movements needed - already at destination")
+                
+        except Exception as e:
+            st.error(f"Error calculating path: {str(e)}")
+            st.exception(e)
+
+def display_grid_preview(start_pos, end_pos, grid_dim):
+    """Display a visual preview of the grid with start and end positions"""
+    grid_html = "<div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;'>"
+    for row in range(grid_dim[0]):
+        for col in range(grid_dim[1]):
+            pos = (row, col)
+            if pos == start_pos:
+                cell_content = "S"
+                color = "lightgreen"
+            elif pos == end_pos:
+                cell_content = "E"
+                color = "lightblue"
+            else:
+                cell_content = "&nbsp;"
+                color = "white"
+            grid_html += f"<div style='border: 1px solid gray; padding: 10px; text-align: center; background-color: {color};'>{cell_content}</div>"
+    grid_html += "</div>"
+    st.markdown(grid_html, unsafe_allow_html=True)
 
 def main():
+
     st.set_page_config(page_title="Robot Control Center", layout="wide")
     st.title("Robot Control Center")
     
@@ -366,7 +463,7 @@ def main():
     if 'current_state' not in st.session_state:
         st.session_state['current_state'] = GridState.TRANSPARENT
     
-    # Layout: Split into two columns - video stream and controls
+    # Layout
     col1, col2 = st.columns([2, 1])
     
     # Control Panel (right column)
@@ -392,7 +489,7 @@ def main():
                 st.session_state['video_client'].disconnect()
                 st.session_state['stream_thread'] = None
                 st.rerun()
-                
+        
         # Robot Connection
         st.subheader("Robot Control")
         robot_host = st.text_input("Robot Host", value="10.1.59.194")
@@ -410,31 +507,34 @@ def main():
                 st.session_state['robot_client'] = None
                 st.rerun()
         
-        # Robot Controls
+        # Manual Robot Controls
         if st.session_state.get('robot_client') and st.session_state['robot_client'].connected:
-            st.subheader("Robot Controls")
+            st.subheader("Manual Controls")
             
-            # Direction pad layout
             c1, c2, c3 = st.columns(3)
             with c2:
-                if st.button("↑"):
+                if st.button("↑", use_container_width=True):
                     st.session_state['robot_client'].send_command('F')
                     
             c1, c2, c3 = st.columns(3)
             with c1:
-                if st.button("←"):
+                if st.button("←", use_container_width=True):
                     st.session_state['robot_client'].send_command('L')
             with c2:
-                if st.button("■"):
+                if st.button("■", use_container_width=True):
                     st.session_state['robot_client'].send_command('S')
             with c3:
-                if st.button("→"):
+                if st.button("→", use_container_width=True):
                     st.session_state['robot_client'].send_command('R')
                     
             c1, c2, c3 = st.columns(3)
             with c2:
-                if st.button("↓"):
+                if st.button("↓", use_container_width=True):
                     st.session_state['robot_client'].send_command('B')
+            
+            # Automation Controls
+            with st.expander("Automation Control", expanded=False):
+                add_automation_panel()
         
         # Grid Overlay Controls
         if st.session_state['video_client'].grid_manager:
@@ -483,9 +583,9 @@ def main():
                         if st.session_state['overlay_enabled'] and st.session_state['video_client'].grid_manager:
                             frame = st.session_state['video_client'].grid_manager.overlay_grid(frame)
                         
-                        # Convert and display frame
                         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         video_container.image(frame_rgb, channels="RGB", use_container_width=True)
+                        
                 except queue.Empty:
                     continue
                 except Exception as e:
