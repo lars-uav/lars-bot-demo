@@ -331,12 +331,40 @@ def calculate_movements(start_pos: tuple[int, int], start_orientation: str, end_
     movements, final_theta = automate_inputs((start_pos, start_orientation), end_pos, grid_dim)
     return movements, final_theta
 
+def front_grid(robot_client):
+    """Move one grid forward with correct timing"""
+    robot_client.send_command('F')
+    time.sleep(2.9)
+    robot_client.send_command('S')
+
+def back_grid(robot_client):
+    """Move one grid backward with correct timing"""
+    robot_client.send_command('B')
+    time.sleep(2.8)
+    robot_client.send_command('S')
+
+def right_grid(robot_client):
+    """Turn right with correct sequence and timing"""
+    robot_client.send_command('R')
+    time.sleep(1.9)
+    robot_client.send_command('S')
+    time.sleep(0.2)
+    robot_client.send_command('F')
+    time.sleep(0.2)
+    robot_client.send_command('S')
+
+def left_grid(robot_client):
+    """Turn left with correct timing"""
+    robot_client.send_command('L')
+    time.sleep(1.9)
+    robot_client.send_command('S')
+
 def add_automation_panel():
     """Creates the automation control panel for the dashboard"""
     st.subheader("Automation Control")
     
     # Grid dimensions
-    grid_dim = (3, 3)
+    grid_dim = (3, 3)  # Can be adjusted based on your GRID_X, GRID_Y constants
     
     # Start position
     st.write("Start Position:")
@@ -362,61 +390,60 @@ def add_automation_panel():
         end_y = st.number_input("Y", min_value=0, max_value=grid_dim[1]-1, value=0, key="end_y")
     
     # Calculate button
-    if st.button("Execute Automated Movement"):
+    if st.button("Calculate and Execute Path"):
         start_pos = (start_x, start_y)
         end_pos = (end_x, end_y)
         
         try:
-            # Prepare the automation request
-            automation_data = {
-                'pose': (start_pos, start_orientation.lower()),
-                'measurement_position': end_pos,
-                'grid_dim': grid_dim
-            }
+            movements, final_theta = automate_inputs(
+                (start_pos, start_orientation.lower()),
+                end_pos,
+                grid_dim
+            )
             
-            # Send request to robot server to execute automation
-            if st.session_state.get('robot_client') and st.session_state['robot_client'].connected:
-                response = requests.post(
-                    f"{st.session_state['robot_client'].base_url}/automate",
-                    json=automation_data,
-                    timeout=30  # Longer timeout for automation
-                )
+            if movements:
+                st.info(f"Calculated movements: {', '.join(movements).upper()}")
+                st.info(f"Final orientation will be: {final_theta.upper()}")
                 
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get('status') == 'success':
-                        st.success("Automation completed successfully!")
-                        st.info(f"Executed movements: {result.get('movements', [])}")
-                        st.info(f"Final orientation: {result.get('final_orientation', '').upper()}")
-                    else:
-                        st.error(f"Automation failed: {result.get('message', 'Unknown error')}")
+                # Execute movements if robot is connected
+                if st.session_state.get('robot_client') and st.session_state['robot_client'].connected:
+                    # Create a progress bar and status text
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    success = True
+                    for i, move in enumerate(movements):
+                        status_text.text(f"Executing movement {i+1}/{len(movements)}: {move.upper()}")
+                        
+                        try:
+                            # Execute movement with correct timing
+                            if move.lower() == 'f':
+                                front_grid(st.session_state['robot_client'])
+                            elif move.lower() == 'b':
+                                back_grid(st.session_state['robot_client'])
+                            elif move.lower() == 'r':
+                                right_grid(st.session_state['robot_client'])
+                            elif move.lower() == 'l':
+                                left_grid(st.session_state['robot_client'])
+                            
+                            progress_bar.progress((i + 1) / len(movements))
+                            time.sleep(0.5)  # Small additional delay between sequences
+                            
+                        except Exception as e:
+                            success = False
+                            st.error(f"Failed executing movement {move.upper()}: {str(e)}")
+                            break
+                    
+                    if success:
+                        status_text.text("Movement sequence completed!")
+                        st.success(f"Successfully moved from {start_pos} to {end_pos}")
                 else:
-                    st.error("Failed to execute automation")
+                    st.warning("Robot not connected. Please connect robot first.")
             else:
-                st.warning("Robot not connected. Please connect robot first.")
+                st.warning("No movements needed - already at destination")
                 
         except Exception as e:
-            st.error(f"Error executing automation: {str(e)}")
-            st.exception(e)
-
-def display_grid_preview(start_pos, end_pos, grid_dim):
-    """Display a visual preview of the grid with start and end positions"""
-    grid_html = "<div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;'>"
-    for row in range(grid_dim[0]):
-        for col in range(grid_dim[1]):
-            pos = (row, col)
-            if pos == start_pos:
-                cell_content = "S"
-                color = "lightgreen"
-            elif pos == end_pos:
-                cell_content = "E"
-                color = "lightblue"
-            else:
-                cell_content = "&nbsp;"
-                color = "white"
-            grid_html += f"<div style='border: 1px solid gray; padding: 10px; text-align: center; background-color: {color};'>{cell_content}</div>"
-    grid_html += "</div>"
-    st.markdown(grid_html, unsafe_allow_html=True)
+            st.error(f"Error calculating path: {str(e)}")
 
 def main():
 

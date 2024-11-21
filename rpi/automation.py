@@ -1,7 +1,4 @@
 import numpy as np
-import argparse
-import json
-import sys
 
 # a change
 
@@ -227,28 +224,5 @@ def test_automation():
     print(f"Movement 10:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
     print(f"Test 2:\n{pose=}\t{measurement_position=}\t{grid_dim=}\n{movements=}\n\n")
 
-
-def main():
-    parser = argparse.ArgumentParser(description='Robot automation script')
-    parser.add_argument('--pose', type=str, required=True, help='Initial pose as JSON ((x,y), orientation)')
-    parser.add_argument('--target', type=str, required=True, help='Target position as JSON (x,y)')
-    parser.add_argument('--grid', type=str, required=True, help='Grid dimensions as JSON (n,m)')
-    
-    args = parser.parse_args()
-    
-    # Parse JSON arguments
-    pose = json.loads(args.pose)
-    target = json.loads(args.target)
-    grid_dim = json.loads(args.grid)
-    
-    # Calculate movements
-    movements, final_theta = automate_inputs(pose, target, grid_dim)
-    
-    # Print results (will be captured by the server)
-    print(','.join(movements))
-    print(final_theta)
-
-if __name__ == "__main__":
-    main()
 if __name__ == "__main__":
     test_automation()
