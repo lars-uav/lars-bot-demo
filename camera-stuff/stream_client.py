@@ -338,18 +338,6 @@ def add_automation_panel():
     # Grid dimensions
     grid_dim = (3, 3)
     
-    # Create a visual representation of the grid
-    st.write("Grid Layout:")
-    grid_container = st.container()
-    with grid_container:
-        for row in range(grid_dim[0]):
-            cols = st.columns(grid_dim[1])
-            for col in range(grid_dim[1]):
-                with cols[col]:
-                    position = f"({row},{col})"
-                    st.markdown(f"<div style='text-align: center; border: 1px solid gray; padding: 10px;'>{position}</div>", 
-                              unsafe_allow_html=True)
-    
     # Start position
     st.write("Start Position:")
     col1, col2, col3 = st.columns(3)
@@ -374,57 +362,41 @@ def add_automation_panel():
         end_y = st.number_input("Y", min_value=0, max_value=grid_dim[1]-1, value=0, key="end_y")
     
     # Calculate button
-    if st.button("Calculate Path"):
+    if st.button("Execute Automated Movement"):
         start_pos = (start_x, start_y)
         end_pos = (end_x, end_y)
         
         try:
-            movements, final_theta = automate_inputs(
-                (start_pos, start_orientation.lower()),
-                end_pos,
-                grid_dim
-            )
+            # Prepare the automation request
+            automation_data = {
+                'pose': (start_pos, start_orientation.lower()),
+                'measurement_position': end_pos,
+                'grid_dim': grid_dim
+            }
             
-            if movements:
-                st.info(f"Calculated movements: {', '.join(movements).upper()}")
-                st.info(f"Final orientation will be: {final_theta.upper()}")
+            # Send request to robot server to execute automation
+            if st.session_state.get('robot_client') and st.session_state['robot_client'].connected:
+                response = requests.post(
+                    f"{st.session_state['robot_client'].base_url}/automate",
+                    json=automation_data,
+                    timeout=30  # Longer timeout for automation
+                )
                 
-                # Execute movements if robot is connected
-                if st.session_state.get('robot_client') and st.session_state['robot_client'].connected:
-                    if st.button("Execute Movements", key="execute_movements"):
-                        movement_map = {
-                            'f': 'F',  # Forward
-                            'b': 'B',  # Backward
-                            'l': 'L',  # Left turn
-                            'r': 'R'   # Right turn
-                        }
-                        
-                        # Create a progress bar
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        success = True
-                        for i, move in enumerate(movements):
-                            cmd = movement_map.get(move.lower())
-                            if cmd:
-                                status_text.text(f"Executing movement {i+1}/{len(movements)}: {cmd}")
-                                if not st.session_state['robot_client'].send_command(cmd):
-                                    success = False
-                                    st.error(f"Failed executing movement: {cmd}")
-                                    break
-                                progress_bar.progress((i + 1) / len(movements))
-                                time.sleep(0.5)  # Small delay between commands
-                        
-                        if success:
-                            status_text.text("Movement sequence completed!")
-                            st.success(f"Successfully moved from {start_pos} to {end_pos}")
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('status') == 'success':
+                        st.success("Automation completed successfully!")
+                        st.info(f"Executed movements: {result.get('movements', [])}")
+                        st.info(f"Final orientation: {result.get('final_orientation', '').upper()}")
+                    else:
+                        st.error(f"Automation failed: {result.get('message', 'Unknown error')}")
                 else:
-                    st.warning("Robot not connected. Please connect robot first.")
+                    st.error("Failed to execute automation")
             else:
-                st.warning("No movements needed - already at destination")
+                st.warning("Robot not connected. Please connect robot first.")
                 
         except Exception as e:
-            st.error(f"Error calculating path: {str(e)}")
+            st.error(f"Error executing automation: {str(e)}")
             st.exception(e)
 
 def display_grid_preview(start_pos, end_pos, grid_dim):
