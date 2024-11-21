@@ -27,7 +27,7 @@ import time
 from automation_optimised import automate_inputs
 from constants import *
 
-arduino = serial.Serial('/dev/ttyACM0', 9600)  # Port and baudrate
+arduino = serial.Serial('/dev/ttyUSB0', 9600)  # Port and baudrate
 
 screen = curses.initscr()
 curses.noecho()
