@@ -272,12 +272,25 @@ class GridOverlayManager:
             self.state = new_state
 
 class RobotClient:
-    def __init__(self, host, port=8001):
-        self.base_url = f"http://{host}:{port}"
+    def __init__(self, host=None, port=8001):
+        self.base_url = None
         self.session = requests.Session()
         self.connected = False
         
+        # Try to read tunnel URL if available
+        try:
+            with open('tunnel_url.json', 'r') as f:
+                tunnel_config = json.load(f)
+                self.base_url = tunnel_config['url']
+        except:
+            # Fall back to direct connection if tunnel not available
+            self.base_url = f"http://{host}:{port}" if host else None
+        
     def connect(self):
+        if not self.base_url:
+            st.error("No connection URL available")
+            return False
+            
         try:
             response = self.session.get(f"{self.base_url}/", timeout=5)
             data = response.json()
