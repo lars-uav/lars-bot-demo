@@ -273,18 +273,21 @@ class GridOverlayManager:
 
 class RobotClient:
     def __init__(self, host=None, port=8001):
-        self.base_url = None
         self.session = requests.Session()
         self.connected = False
         
-        # Try to read tunnel URL if available
+        # Try to get URL from Streamlit secrets first
         try:
-            with open('tunnel_url.json', 'r') as f:
-                tunnel_config = json.load(f)
-                self.base_url = tunnel_config['url']
+            self.base_url = st.secrets["ROBOT_URL"]
         except:
-            # Fall back to direct connection if tunnel not available
-            self.base_url = f"http://{host}:{port}" if host else None
+            # Fall back to direct connection if no secret is available
+            if host:
+                self.base_url = f"http://{host}:{port}"
+            else:
+                self.base_url = None
+                
+        if not self.base_url:
+            st.warning("No robot URL configured. Please set up the tunnel URL in Streamlit secrets.")
         
     def connect(self):
         if not self.base_url:
