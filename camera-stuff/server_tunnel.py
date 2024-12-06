@@ -1,4 +1,4 @@
-from pyngrok import ngrok
+from pyngrok import ngrok, conf
 import json
 import os
 import dotenv
@@ -11,12 +11,17 @@ def setup_tunnel(port=8001):
     Returns the public URL that can be used to access the server
     """
     try:
-        # Configure ngrok to create a persistent tunnel
-        tunnel_config = ngrok.connect(port, "http", options={
-            "bind_tls": True,  # Enable HTTPS
-        })
+        # Configure ngrok
+        pyngrok_config = conf.PyngrokConfig(
+            auth_token=os.getenv('NGROK_AUTH_TOKEN'),
+            region="us"
+        )
+        ngrok.set_auth_token(os.getenv('NGROK_AUTH_TOKEN'))
         
-        tunnel_url = tunnel_config.public_url
+        # Start tunnel with basic configuration
+        tunnel = ngrok.connect(port)
+        tunnel_url = tunnel.public_url
+        
         print(f"Tunnel established at: {tunnel_url}")
         print("Add this URL to your Streamlit secrets.toml file as:")
         print(f"ROBOT_URL = '{tunnel_url}'")
@@ -28,8 +33,11 @@ def setup_tunnel(port=8001):
         return None
 
 if __name__ == "__main__":
-    # Set your ngrok auth token
-    ngrok.set_auth_token(os.getenv('NGROK_AUTH_TOKEN'))
+    # Verify auth token exists
+    if not os.getenv('NGROK_AUTH_TOKEN'):
+        print("Error: NGROK_AUTH_TOKEN not found in environment variables")
+        exit(1)
+        
     # Setup the tunnel
     tunnel_url = setup_tunnel()
     
@@ -42,3 +50,5 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print("Shutting down tunnel...")
             ngrok.kill()
+    else:
+        print("Failed to establish tunnel")
