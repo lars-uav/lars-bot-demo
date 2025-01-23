@@ -12,7 +12,90 @@ import os
 import struct
 import pickle
 from enum import Enum
+import threading
+import time
+from queue import Queue
+from dataclasses import dataclass
+from typing import List, Optional
+from enum import Enum
 
+@dataclass
+class MovementCommand:
+    command: str
+    duration: float
+    callback: Optional[callable] = None
+
+class MovementExecutor:
+    def __init__(self, robot_client):
+        self.robot_client = robot_client
+        self.command_queue = Queue()
+        self.is_running = False
+        self.executor_thread = None
+        self.current_sequence = None
+        
+    def start(self):
+        if not self.is_running:
+            self.is_running = True
+            self.executor_thread = threading.Thread(target=self._process_commands)
+            self.executor_thread.daemon = True
+            self.executor_thread.start()
+            
+    def stop(self):
+        self.is_running = False
+        if self.executor_thread:
+            self.executor_thread.join()
+            
+    def _process_commands(self):
+        while self.is_running:
+            try:
+                if not self.command_queue.empty():
+                    command = self.command_queue.get()
+                    self.robot_client.send_command(command.command)
+                    if command.duration > 0:
+                        time.sleep(command.duration)
+                    if command.callback:
+                        command.callback()
+                else:
+                    time.sleep(0.01)
+            except Exception as e:
+                print(f"Error executing movement: {str(e)}")
+                
+    def queue_movement(self, movement: str, callback: Optional[callable] = None):
+        """Queue a single movement command"""
+        duration = 0
+        if movement.upper() == 'F':
+            duration = 2.7
+        elif movement.upper() == 'B':
+            duration = 2.8
+        elif movement.upper() in ['L', 'R']:
+            duration = 1.557
+            
+        self.command_queue.put(MovementCommand(movement.upper(), duration, callback))
+        if movement.upper() in ['L', 'R']:
+            # Add the small forward movement after turns
+            self.command_queue.put(MovementCommand('F', 0.2))
+            self.command_queue.put(MovementCommand('S', 0))
+            
+        # Add stop command after movement
+        self.command_queue.put(MovementCommand('S', 0))
+        
+    def queue_sequence(self, movements: List[str], progress_callback=None):
+        """Queue a sequence of movements"""
+        total_moves = len(movements)
+        for i, move in enumerate(movements):
+            def make_callback(index=i):
+                if progress_callback:
+                    progress_callback((index + 1) / total_moves)
+            self.queue_movement(move, callback=make_callback)
+            # Add small delay between sequences
+            self.command_queue.put(MovementCommand('S', 0.5))
+
+def execute_movement_sequence(robot_client, movements: List[str], progress_callback=None):
+    """Execute a sequence of movements asynchronously"""
+    executor = MovementExecutor(robot_client)
+    executor.start()
+    executor.queue_sequence(movements, progress_callback)
+    return executor
 # Grid and Automation Support Functions
 def cartesian_to_matrix_index(coord, grid_dim):
     x, y = coord
@@ -104,9 +187,9 @@ class GridOverlayManager:
     def __init__(self):
         current_dir = os.path.dirname(os.path.abspath(__file__))
         self.grid_paths = {
-            'transparent': os.path.join(current_dir, "grids", "transparent_grid.png"),
-            'reflectance': os.path.join(current_dir, "grids", "reflectance_grid.png"),
-            'stressed': os.path.join(current_dir, "grids", "stressed_grid.png")
+            'transparent': "camera-stuff/transparent_grid.png",
+            'reflectance': "camera-stuff/reflectance_grid.png",
+            'stressed': "camera-stuff/reflectance_grid_stressed.png"
         }
         
         self.state = GridState.TRANSPARENT
@@ -189,12 +272,28 @@ class GridOverlayManager:
             self.state = new_state
 
 class RobotClient:
-    def __init__(self, host, port=8001):
-        self.base_url = f"http://{host}:{port}"
+    def __init__(self, host=None, port=8001):
         self.session = requests.Session()
         self.connected = False
         
+        # Try to get URL from Streamlit secrets first
+        try:
+            self.base_url = st.secrets["ROBOT_URL"]
+        except:
+            # Fall back to direct connection if no secret is available
+            if host:
+                self.base_url = f"http://{host}:{port}"
+            else:
+                self.base_url = None
+                
+        if not self.base_url:
+            st.warning("No robot URL configured. Please set up the tunnel URL in Streamlit secrets.")
+        
     def connect(self):
+        if not self.base_url:
+            st.error("No connection URL available")
+            return False
+            
         try:
             response = self.session.get(f"{self.base_url}/", timeout=5)
             data = response.json()
@@ -334,7 +433,7 @@ def calculate_movements(start_pos: tuple[int, int], start_orientation: str, end_
 def front_grid(robot_client):
     """Move one grid forward with correct timing"""
     robot_client.send_command('F')
-    time.sleep(2.9)
+    time.sleep(2.7)
     robot_client.send_command('S')
 
 def back_grid(robot_client):
@@ -346,7 +445,7 @@ def back_grid(robot_client):
 def right_grid(robot_client):
     """Turn right with correct sequence and timing"""
     robot_client.send_command('R')
-    time.sleep(1.9)
+    time.sleep(1.557)
     robot_client.send_command('S')
     time.sleep(0.2)
     robot_client.send_command('F')
@@ -356,7 +455,7 @@ def right_grid(robot_client):
 def left_grid(robot_client):
     """Turn left with correct timing"""
     robot_client.send_command('L')
-    time.sleep(1.9)
+    time.sleep(1.557)
     robot_client.send_command('S')
 
 def add_automation_panel():
@@ -364,7 +463,7 @@ def add_automation_panel():
     st.subheader("Automation Control")
     
     # Grid dimensions
-    grid_dim = (3, 3)  # Can be adjusted based on your GRID_X, GRID_Y constants
+    grid_dim = (3, 3)
     
     # Start position
     st.write("Start Position:")
@@ -411,32 +510,28 @@ def add_automation_panel():
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    success = True
-                    for i, move in enumerate(movements):
-                        status_text.text(f"Executing movement {i+1}/{len(movements)}: {move.upper()}")
-                        
-                        try:
-                            # Execute movement with correct timing
-                            if move.lower() == 'f':
-                                front_grid(st.session_state['robot_client'])
-                            elif move.lower() == 'b':
-                                back_grid(st.session_state['robot_client'])
-                            elif move.lower() == 'r':
-                                right_grid(st.session_state['robot_client'])
-                            elif move.lower() == 'l':
-                                left_grid(st.session_state['robot_client'])
-                            
-                            progress_bar.progress((i + 1) / len(movements))
-                            time.sleep(0.5)  # Small additional delay between sequences
-                            
-                        except Exception as e:
-                            success = False
-                            st.error(f"Failed executing movement {move.upper()}: {str(e)}")
-                            break
+                    def update_progress(progress):
+                        progress_bar.progress(progress)
+                        status_text.text(f"Executing movement {int(progress * len(movements))}/{len(movements)}")
                     
-                    if success:
-                        status_text.text("Movement sequence completed!")
-                        st.success(f"Successfully moved from {start_pos} to {end_pos}")
+                    try:
+                        # Initialize movement executor if not exists
+                        if 'movement_executor' not in st.session_state:
+                            st.session_state['movement_executor'] = None
+                            
+                        # Stop previous execution if exists
+                        if st.session_state['movement_executor']:
+                            st.session_state['movement_executor'].stop()
+                            
+                        # Start new execution
+                        st.session_state['movement_executor'] = execute_movement_sequence(
+                            st.session_state['robot_client'],
+                            movements,
+                            progress_callback=update_progress
+                        )
+                        
+                    except Exception as e:
+                        st.error(f"Failed executing movement sequence: {str(e)}")
                 else:
                     st.warning("Robot not connected. Please connect robot first.")
             else:
