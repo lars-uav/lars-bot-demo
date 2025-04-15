@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: arduino-serial-publisher
+Version: 0.0.1
+Summary: ROS 2 package for controlling an Arduino robot using published pose data.
+Home-page: UNKNOWN
+Maintainer: tanayrs
+Maintainer-email: tanay@tanayrs.com
+License: MIT
+Platform: UNKNOWN
+
+UNKNOWN
+

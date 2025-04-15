@@ -1,0 +1,5 @@
+[console_scripts]
+key_move_print = arduino_serial_publisher.key_move_print:main
+key_move_serial = arduino_serial_publisher.key_move_serial:main
+publish_pose = arduino_serial_publisher.publish_pose:main
+
