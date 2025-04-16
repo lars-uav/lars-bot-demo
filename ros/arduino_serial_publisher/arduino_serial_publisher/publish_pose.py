@@ -18,6 +18,12 @@ class PosePublisher(Node):
         msg.data = pose_str
         self.publisher_.publish(msg)
         self.get_logger().info(f'Published: {msg.data}')
+
+    def publish_movement(self, movement):
+        msg = String()
+        msg.data = movement
+        self.publisher_.publish(msg)
+        self.get_logger().info(f'Published: {msg.data}')
         
     def bytes_pose_to_tuple(self, b: bytes):
         b = b.decode("utf-8").strip().split(" ")
@@ -26,30 +32,32 @@ class PosePublisher(Node):
         return b
         
     def front_grid(self):
-        # Update pose logic for moving forward
+        self.publish_movement('f')
+
         if self.current_pose['heading'] == 'U':
-            self.current_pose['y'] -= 1
-        elif self.current_pose['heading'] == 'D':
             self.current_pose['y'] += 1
-        elif self.current_pose['heading'] == 'L':
-            self.current_pose['x'] -= 1
         elif self.current_pose['heading'] == 'R':
             self.current_pose['x'] += 1
-        self.publish_pose()
+        elif self.current_pose['heading'] == 'D':
+            self.current_pose['y'] -= 1
+        elif self.current_pose['heading'] == 'L':
+            self.current_pose['x'] -= 1
     
     def back_grid(self):
-        # Update pose logic for moving backward
+        self.publish_movement('b')
+
         if self.current_pose['heading'] == 'U':
-            self.current_pose['y'] += 1
-        elif self.current_pose['heading'] == 'D':
             self.current_pose['y'] -= 1
-        elif self.current_pose['heading'] == 'L':
-            self.current_pose['x'] += 1
         elif self.current_pose['heading'] == 'R':
             self.current_pose['x'] -= 1
-        self.publish_pose()
+        elif self.current_pose['heading'] == 'D':
+            self.current_pose['y'] += 1
+        elif self.current_pose['heading'] == 'L':
+            self.current_pose['x'] += 1
     
     def right_grid(self):
+        self.publish_movement('r')
+
         # Update heading for right turn
         if self.current_pose['heading'] == 'U':
             self.current_pose['heading'] = 'R'
@@ -59,9 +67,10 @@ class PosePublisher(Node):
             self.current_pose['heading'] = 'L'
         elif self.current_pose['heading'] == 'L':
             self.current_pose['heading'] = 'U'
-        self.publish_pose()
     
     def left_grid(self):
+        self.publish_movement('l')
+
         # Update heading for left turn
         if self.current_pose['heading'] == 'U':
             self.current_pose['heading'] = 'L'
@@ -71,7 +80,6 @@ class PosePublisher(Node):
             self.current_pose['heading'] = 'R'
         elif self.current_pose['heading'] == 'R':
             self.current_pose['heading'] = 'U'
-        self.publish_pose()
     
     def set_current_pose(self, x, y, heading):
         self.current_pose['x'] = x
@@ -97,6 +105,7 @@ class PosePublisher(Node):
                 screen.clear()
                 screen.addstr(0, 0, "ROS2 Pose Publisher. Press 'q' to quit.\n")
                 screen.addstr("Press arrow keys to move the robot.\n")
+                screen.addstr("Press x for autonomous grid movement.\n")
                 screen.addstr("Current pose: x={}, y={}, heading={}\n".format(
                     self.current_pose['x'], self.current_pose['y'], self.current_pose['heading']))
                 screen.addstr("Goal pose: x={}, y={}\n".format(

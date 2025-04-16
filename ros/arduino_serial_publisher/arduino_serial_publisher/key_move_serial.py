@@ -41,6 +41,18 @@ class PoseSubscriber(Node):
     def listener_callback(self, msg):
         try:
             tokens = msg.data.strip().split()
+            if tokens.len() == 1:
+                action = tokens
+                if action == 'f':
+                    self.front_grid()
+                elif action == 'b':
+                    self.back_grid()
+                elif action == 'r':
+                    self.right_grid()
+                return
+            if len(tokens) != 5:
+                raise ValueError("Invalid pose string format. Expected 5 tokens.")
+            
             curr_x, curr_y = int(tokens[0]), int(tokens[1])
             heading = tokens[2]
             goal_x, goal_y = int(tokens[3]), int(tokens[4])
