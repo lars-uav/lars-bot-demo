@@ -46,9 +46,11 @@ class PoseSubscriber(Node):
             goal_x, goal_y = int(tokens[3]), int(tokens[4])
 
             self.get_logger().info(f"Received pose string: {msg.data}")
-            poses, _ = automate_inputs(((curr_x, curr_y), heading), (goal_x, goal_y), (GRID_X, GRID_Y))
+            poses, _ = automate_inputs(((curr_x, curr_y), heading.lower()), (goal_x, goal_y), (GRID_X, GRID_Y))
+            self.get_logger().info(f"Determined Actions: {poses}")
 
             for action in poses:
+                self.get_logger().info(f"Taking action: {action}")
                 if action == 'f':
                     self.front_grid()
                 elif action == 'r':
